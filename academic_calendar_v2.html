@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>教務處行事曆 115–116學年</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root {
+  --bg:        #f4f3ef;
+  --surface:   #fefefe;
+  --surface-2: #f8f7f4;
+  --ink:       #18181a;
+  --ink-2:     #46464f;
+  --ink-3:     #9494a0;
+  --divider:   #e2e1dc;
+  --accent:    #1f4788;
+  --weekend-bg:#f9f4ec;
+  --today-bg:  #e8f0fc;
+  --today-num: #1f4788;
+  --empty-bg:  #f0efe9;
+
+  --s-bg:#deeaf8; --s-fg:#1a3d75; --s-bd:#a8c4e8;
+  --d-bg:#fde8d8; --d-fg:#7a3515; --d-bd:#f0b898;
+  --t-bg:#d6f0e4; --t-fg:#135a30; --t-bd:#8ed4b0;
+  --r-bg:#ecdcf4; --r-fg:#5e1a7a; --r-bd:#c89de0;
+  --e-bg:#faf2cc; --e-fg:#5a4400; --e-bd:#d8c050;
+  --i-bg:#cdf3f8; --i-fg:#004a5a; --i-bd:#80d8e8;
+
+  --col-w: 168px;
+  --topbar-h: 56px;
+  --legend-h: 38px;
+  --wday-h: 30px;
+  --monthhead-h: 40px;
+  --sticky-offset: calc(var(--topbar-h) + var(--legend-h));
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --shadow-modal: 0 24px 60px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:auto;}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;-webkit-font-smoothing:antialiased;}
+
+/* TOPBAR */
+.topbar{position:sticky;top:0;z-index:40;height:var(--topbar-h);background:var(--ink);display:flex;align-items:center;padding:0 20px;gap:12px;box-shadow:0 2px 12px rgba(0,0,0,0.3);}
+.topbar-brand{display:flex;align-items:baseline;gap:10px;flex:1;min-width:0;}
+.brand-title{font-size:1rem;font-weight:700;letter-spacing:.07em;color:#fff;white-space:nowrap;}
+.brand-sub{font-family:'DM Mono',monospace;font-size:.62rem;color:rgba(255,255,255,.35);letter-spacing:.05em;white-space:nowrap;}
+.topbar-center{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.sy-seg{display:flex;background:rgba(255,255,255,.08);border-radius:var(--radius-md);padding:3px;gap:2px;}
+.sy-opt{background:none;border:none;padding:4px 12px;border-radius:6px;font-size:.72rem;font-weight:500;color:rgba(255,255,255,.5);cursor:pointer;font-family:'Noto Sans TC',sans-serif;letter-spacing:.04em;transition:all .15s;white-space:nowrap;}
+.sy-opt.on{background:#fff;color:var(--ink);}
+.nav-month{display:flex;align-items:center;gap:6px;}
+.nav-arrow{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:var(--radius-sm);color:#fff;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:.75rem;transition:background .1s;}
+.nav-arrow:hover{background:rgba(255,255,255,.22);}
+.cur-month-lbl{font-family:'DM Mono',monospace;font-size:.78rem;font-weight:500;color:rgba(255,255,255,.9);min-width:88px;text-align:center;letter-spacing:.04em;}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.today-btn{background:var(--accent);border:none;border-radius:var(--radius-sm);padding:5px 14px;font-size:.75rem;font-weight:500;color:#fff;cursor:pointer;font-family:'Noto Sans TC',sans-serif;letter-spacing:.04em;transition:background .1s;white-space:nowrap;}
+.today-btn:hover{background:#163566;}
+.sync-pill{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:3px 10px 3px 7px;}
+.dot{width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0;transition:background .3s;}
+.dot.ok{background:#4caf50;box-shadow:0 0 5px #4caf5077;}
+.dot.sync{background:#ffb300;animation:blink .8s infinite;}
+.dot.err{background:#ef5350;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.sync-lbl{font-family:'DM Mono',monospace;font-size:.6rem;color:rgba(255,255,255,.4);white-space:nowrap;}
+
+/* LEGEND */
+.legend-bar{position:sticky;top:var(--topbar-h);z-index:39;height:var(--legend-h);background:var(--surface);border-bottom:1px solid var(--divider);display:flex;align-items:center;padding:0 20px;gap:0;overflow-x:auto;}
+.legend-bar::-webkit-scrollbar{display:none;}
+.leg{display:flex;align-items:center;gap:6px;padding:0 14px;height:100%;border-right:1px solid var(--divider);white-space:nowrap;cursor:default;flex-shrink:0;}
+.leg:first-child{padding-left:0;}
+.leg:last-child{border-right:none;margin-left:auto;}
+.leg-pip{width:22px;height:8px;border-radius:3px;flex-shrink:0;}
+.leg-name{font-size:.7rem;font-weight:600;letter-spacing:.05em;color:var(--ink-2);}
+.room-link{font-size:.68rem;color:var(--ink-3);cursor:pointer;padding:0 4px;transition:color .1s;}
+.room-link:hover{color:var(--accent);}
+
+/* SCROLL WRAPPER */
+.cal-scroll{width:100%;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;}
+.cal-scroll::-webkit-scrollbar{height:5px;}
+.cal-scroll::-webkit-scrollbar-track{background:var(--divider);}
+.cal-scroll::-webkit-scrollbar-thumb{background:#bbb;border-radius:3px;}
+
+/* MONTH */
+.month-section{width:max-content;min-width:100%;}
+.month-heading{position:sticky;top:var(--sticky-offset);z-index:12;display:grid;grid-template-columns:repeat(7,var(--col-w));width:max-content;background:var(--ink);height:var(--monthhead-h);}
+.mh-title{grid-column:1/-1;display:flex;align-items:center;padding:0 16px;gap:8px;}
+.mh-yr{font-family:'DM Mono',monospace;font-size:.62rem;color:rgba(255,255,255,.35);}
+.mh-mon{font-size:.95rem;font-weight:700;color:#fff;letter-spacing:.04em;}
+.mh-sy{font-family:'DM Mono',monospace;font-size:.58rem;color:rgba(255,255,255,.28);margin-left:auto;}
+.wday-row{position:sticky;top:calc(var(--sticky-offset) + var(--monthhead-h));z-index:11;display:grid;grid-template-columns:repeat(7,var(--col-w));width:max-content;background:var(--surface-2);border-bottom:1.5px solid var(--divider);}
+.wday-cell{height:var(--wday-h);display:flex;align-items:center;padding:0 9px;font-size:.68rem;font-weight:700;letter-spacing:.1em;color:var(--ink-3);border-right:1px solid var(--divider);}
+.wday-cell.sat{color:#2255aa;}
+.wday-cell.sun{color:#b02222;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,var(--col-w));border-left:1px solid var(--divider);border-top:1px solid var(--divider);width:max-content;background:var(--surface);}
+
+/* DAY CELL */
+.day-cell{width:var(--col-w);min-height:136px;padding:8px 7px 20px;border-right:1px solid var(--divider);border-bottom:1px solid var(--divider);cursor:pointer;display:flex;flex-direction:column;gap:3px;position:relative;background:var(--surface);transition:background .12s;}
+.day-cell:hover{background:#eeeee8;}
+.day-cell.empty{background:var(--empty-bg);cursor:default;pointer-events:none;}
+.day-cell.weekend{background:var(--weekend-bg);}
+.day-cell.weekend:hover{background:#f0e8d4;}
+.day-cell.today{background:var(--today-bg);}
+.day-cell.today:hover{background:#d6e8fc;}
+.day-cell.has-data::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--accent);opacity:.55;}
+/* 國定假日 */
+.day-cell.holiday{background:#fef0f0;}
+.day-cell.holiday:hover{background:#fde0e0;}
+.day-cell.holiday .date-num{color:#c0392b;}
+.holiday-tag{
+  display:inline-block;
+  font-size:9px;font-weight:700;letter-spacing:.04em;
+  color:#c0392b;background:#fcdada;
+  border-radius:3px;padding:1px 5px;
+  margin-bottom:1px;flex-shrink:0;
+  border-left:2px solid #e88;
+}
+/* 假日同時是週末：假日色優先 */
+.day-cell.weekend.holiday{background:#fef0f0;}
+.day-cell.weekend.holiday:hover{background:#fde0e0;}
+.date-badge{display:flex;align-items:center;gap:5px;flex-shrink:0;margin-bottom:2px;}
+.date-num{font-family:'DM Mono',monospace;font-size:.82rem;font-weight:500;color:var(--ink-2);line-height:1;}
+.date-circle{font-family:'DM Mono',monospace;font-size:.75rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;line-height:1;}
+.day-cell.weekend .date-num{color:#7a4a1a;}
+.edit-hint{display:none;position:absolute;bottom:4px;right:6px;font-size:.58rem;color:var(--ink-3);letter-spacing:.03em;}
+.day-cell:hover .edit-hint{display:block;}
+/* chips — 自動換行，格子跟著撐高 */
+.entry-chips{display:flex;flex-direction:column;gap:3px;}
+.chip{
+  font-size:10px;border-radius:3px;padding:2px 6px 3px;
+  white-space:normal;          /* 允許換行 */
+  word-break:break-all;        /* 中文長字串強制折行 */
+  overflow-wrap:break-word;
+  line-height:1.55;font-weight:500;
+  border-left:2.5px solid transparent;
+  display:block;
+}
+.chip-label{font-weight:700;margin-right:2px;opacity:.75;}
+.overflow-lbl{font-size:9px;color:var(--ink-3);text-align:right;padding-right:3px;margin-top:1px;}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;z-index:200;background:rgba(8,8,12,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;pointer-events:none;transition:opacity .18s;}
+.overlay.open{opacity:1;pointer-events:all;}
+.modal{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--divider);box-shadow:var(--shadow-modal);width:100%;max-width:520px;max-height:92dvh;overflow:hidden;display:flex;flex-direction:column;transform:translateY(14px) scale(.97);transition:transform .18s;}
+.overlay.open .modal{transform:translateY(0) scale(1);}
+.modal-top{padding:18px 20px 14px;border-bottom:1px solid var(--divider);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface);}
+.modal-date-lbl{font-size:1.15rem;font-weight:700;color:var(--ink);letter-spacing:.03em;}
+.modal-sub{font-size:.7rem;color:var(--ink-3);font-family:'DM Mono',monospace;margin-top:3px;}
+.modal-x{background:none;border:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-3);font-size:1rem;flex-shrink:0;transition:background .1s,color .1s;}
+.modal-x:hover{background:var(--bg);color:var(--ink);}
+.modal-body{overflow-y:auto;flex:1;padding:14px 20px;display:flex;flex-direction:column;gap:10px;}
+.modal-body::-webkit-scrollbar{width:4px;}
+.modal-body::-webkit-scrollbar-thumb{background:#ccc;border-radius:2px;}
+.cat-field{display:flex;align-items:flex-start;gap:10px;}
+.cat-pill{flex-shrink:0;width:42px;padding:4px 0;border-radius:5px;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-align:center;margin-top:2px;}
+.field-ta{flex:1;border:1px solid var(--divider);border-radius:var(--radius-sm);padding:7px 10px;font-family:'Noto Sans TC',sans-serif;font-size:.82rem;color:var(--ink);background:var(--surface-2);resize:vertical;min-height:38px;line-height:1.55;transition:border-color .12s,background .12s;}
+.field-ta:focus{outline:none;border-color:var(--accent);background:var(--surface);}
+.field-ta::placeholder{color:var(--ink-3);}
+.modal-foot{padding:12px 20px 16px;border-top:1px solid var(--divider);display:flex;align-items:center;gap:8px;flex-shrink:0;background:var(--surface);}
+.foot-left{flex:1;display:flex;align-items:center;gap:8px;}
+.save-txt{font-size:.7rem;color:var(--ink-3);font-family:'DM Mono',monospace;transition:color .2s;min-width:80px;}
+.save-txt.saving{color:#e67e00;}
+.save-txt.saved{color:#2e7d32;}
+.save-txt.fail{color:#c0392b;}
+.btn-del{background:none;border:1px solid var(--divider);border-radius:var(--radius-sm);padding:7px 14px;font-size:.78rem;cursor:pointer;color:var(--ink-3);font-family:'Noto Sans TC',sans-serif;transition:border-color .1s,color .1s;}
+.btn-del:hover{border-color:#e53935;color:#e53935;}
+.btn-save{background:var(--accent);border:none;border-radius:var(--radius-sm);padding:7px 22px;font-size:.82rem;color:#fff;cursor:pointer;font-family:'Noto Sans TC',sans-serif;font-weight:500;letter-spacing:.04em;transition:background .12s;}
+.btn-save:hover{background:#163566;}
+.btn-save:active{transform:scale(.98);}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);background:#222;color:#fff;padding:8px 22px;border-radius:20px;font-size:.78rem;font-family:'Noto Sans TC',sans-serif;z-index:999;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* LOADING */
+.loading-screen{position:fixed;inset:0;z-index:500;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .35s;}
+.loading-title{font-size:1.1rem;font-weight:700;color:#fff;letter-spacing:.08em;}
+.loading-sub{font-size:.72rem;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace;}
+.spinner{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,.15);border-top-color:#fff;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* MOBILE */
+@media(max-width:640px){
+  :root{--col-w:140px;}
+  .brand-sub,.sync-pill{display:none;}
+  .topbar{padding:0 12px;gap:8px;}
+  .sy-opt{padding:4px 9px;font-size:.68rem;}
+  .today-btn{padding:5px 10px;font-size:.7rem;}
+  .day-cell{min-height:108px;}
+  .chip{font-size:9px;padding:2px 5px 3px;}
+  .legend-bar{padding:0 12px;}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <div class="loading-title">教務處行事曆</div>
+  <div class="loading-sub" id="loadingMsg">正在連線至資料庫…</div>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-title">教務處行事曆</span>
+    <span class="brand-sub">115–116 學年度</span>
+  </div>
+  <div class="topbar-center">
+    <div class="sy-seg" id="sySeg">
+      <button class="sy-opt on" data-sy="0">115學年</button>
+      <button class="sy-opt"    data-sy="1">116學年</button>
+    </div>
+    <div class="nav-month">
+      <button class="nav-arrow" id="prevBtn">◀</button>
+      <span class="cur-month-lbl" id="curMonthLbl">—</span>
+      <button class="nav-arrow" id="nextBtn">▶</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="today-btn" id="todayBtn">今日</button>
+    <div class="sync-pill">
+      <div class="dot" id="syncDot"></div>
+      <span class="sync-lbl" id="syncLbl">連線中</span>
+    </div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend-bar">
+  <div class="leg"><div class="leg-pip" style="background:var(--s-bg);border:1px solid var(--s-bd)"></div><span class="leg-name">學校</span></div>
+  <div class="leg"><div class="leg-pip" style="background:var(--d-bg);border:1px solid var(--d-bd)"></div><span class="leg-name">主任</span></div>
+  <div class="leg"><div class="leg-pip" style="background:var(--t-bg);border:1px solid var(--t-bd)"></div><span class="leg-name">教學</span></div>
+  <div class="leg"><div class="leg-pip" style="background:var(--r-bg);border:1px solid var(--r-bd)"></div><span class="leg-name">註冊</span></div>
+  <div class="leg"><div class="leg-pip" style="background:var(--e-bg);border:1px solid var(--e-bd)"></div><span class="leg-name">設備</span></div>
+  <div class="leg"><div class="leg-pip" style="background:var(--i-bg);border:1px solid var(--i-bd)"></div><span class="leg-name">資訊</span></div>
+  <div class="leg">
+    <span class="room-link" onclick="showRoomDialog()">⚙ 切換房間</span>
+  </div>
+</div>
+
+<!-- Calendar -->
+<div class="cal-scroll" id="calScroll">
+  <div id="calContainer"></div>
+</div>
+
+<!-- Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-top">
+      <div>
+        <div class="modal-date-lbl" id="modalDateLbl"></div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <button class="modal-x" id="modalX">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot">
+      <div class="foot-left">
+        <span class="save-txt" id="saveTxt"></span>
+      </div>
+      <button class="btn-del" id="delBtn">清除當日</button>
+      <button class="btn-save" id="saveBtn">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════
+   FIREBASE — 使用您的設定
+════════════════════════════ */
+firebase.initializeApp({
+  apiKey:            "AIzaSyBf1QbAi_kgM6CuE_9l-GG_AfJ_ktI1uMM",
+  authDomain:        "dk115-c5dfa.firebaseapp.com",
+  databaseURL:       "https://dk115-c5dfa-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "dk115-c5dfa",
+  storageBucket:     "dk115-c5dfa.firebasestorage.app",
+  messagingSenderId: "730311740743",
+  appId:             "1:730311740743:web:b3054b0531d51a6dce5062"
+});
+const fbDb = firebase.database();
+
+/* ════════════════════════════
+   ROOM / LISTENER
+════════════════════════════ */
+const ROOM_LS = 'acal_room_v1';
+let roomKey = localStorage.getItem(ROOM_LS) || 'main';
+let fbRef    = null;
+let liveDb   = {};
+
+function attachListener(room) {
+  if (fbRef) fbRef.off();
+  roomKey = room.replace(/[^a-zA-Z0-9_\-]/g,'') || 'main';
+  localStorage.setItem(ROOM_LS, roomKey);
+  fbRef = fbDb.ref('acal/' + roomKey);
+  setSyncDot('sync');
+  document.getElementById('syncLbl').textContent = '連線中…';
+  fbRef.on('value', snap => {
+    liveDb = snap.val() || {};
+    refreshAllChips();
+    setSyncDot('ok');
+    document.getElementById('syncLbl').textContent = roomKey;
+    hideLoading();
+  }, err => {
+    setSyncDot('err');
+    document.getElementById('syncLbl').textContent = '離線';
+    document.getElementById('loadingMsg').textContent = '資料庫連線失敗：請檢查 Firebase 規則是否允許讀寫';
+  });
+}
+
+function setSyncDot(s) { document.getElementById('syncDot').className = 'dot ' + s; }
+
+function setEntry(dk, data) {
+  setSyncDot('sync');
+  return fbRef.child(dk).set(data)
+    .then(() => setSyncDot('ok'))
+    .catch(e => { setSyncDot('err'); throw e; });
+}
+
+function delEntry(dk) {
+  setSyncDot('sync');
+  return fbRef.child(dk).remove()
+    .then(() => setSyncDot('ok'))
+    .catch(e => { setSyncDot('err'); throw e; });
+}
+
+function getEntry(dk) { return liveDb[dk] || {}; }
+
+/* ════════════════════════════
+   CONSTANTS
+════════════════════════════ */
+const CATS = [
+  { key:'school',   label:'學校', bg:'var(--s-bg)', fg:'var(--s-fg)', bd:'var(--s-bd)' },
+  { key:'director', label:'主任', bg:'var(--d-bg)', fg:'var(--d-fg)', bd:'var(--d-bd)' },
+  { key:'teach',    label:'教學', bg:'var(--t-bg)', fg:'var(--t-fg)', bd:'var(--t-bd)' },
+  { key:'reg',      label:'註冊', bg:'var(--r-bg)', fg:'var(--r-fg)', bd:'var(--r-bd)' },
+  { key:'equip',    label:'設備', bg:'var(--e-bg)', fg:'var(--e-fg)', bd:'var(--e-bd)' },
+  { key:'info',     label:'資訊', bg:'var(--i-bg)', fg:'var(--i-fg)', bd:'var(--i-bd)' },
+];
+const TW_MON = ['一','二','三','四','五','六','七','八','九','十','十一','十二'];
+const WDAYS  = ['一','二','三','四','五','六','日'];
+const SY_DEF = [
+  { months: makeMonths(2026,8,2027,7) },
+  { months: makeMonths(2027,8,2028,7) },
+];
+
+function makeMonths(sy,sm,ey,em) {
+  const out=[]; let y=sy,m=sm;
+  while(y<ey||(y===ey&&m<=em)){ out.push({year:y,month:m}); if(++m>12){m=1;y++;} }
+  return out;
+}
+function dkey(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function syLabel(y,m){ return ((y===2026&&m>=8)||(y===2027&&m<=7))?'115學年度':'116學年度'; }
+
+/* ════════════════════
+   台灣國定假日 2026–2028
+════════════════════ */
+const TW_HOLIDAYS = {
+  '2026-01-01':'元旦','2026-01-28':'除夕','2026-01-29':'春節','2026-01-30':'春節',
+  '2026-01-31':'春節','2026-02-01':'春節','2026-02-02':'春節',
+  '2026-02-28':'和平紀念日','2026-04-03':'兒童節補假','2026-04-04':'兒童節暨清明',
+  '2026-04-05':'清明補假','2026-05-01':'勞動節','2026-06-19':'端午節',
+  '2026-09-27':'中秋節','2026-10-09':'國慶補假','2026-10-10':'國慶日',
+  '2027-01-01':'元旦','2027-01-15':'除夕','2027-01-16':'春節','2027-01-17':'春節',
+  '2027-01-18':'春節','2027-01-19':'春節','2027-01-20':'春節',
+  '2027-02-27':'和平紀念補假','2027-02-28':'和平紀念日',
+  '2027-04-03':'兒童節','2027-04-05':'清明節','2027-05-01':'勞動節',
+  '2027-06-08':'端午節','2027-09-15':'中秋節','2027-10-10':'國慶日',
+  '2028-01-01':'元旦','2028-01-03':'春節補假','2028-01-04':'除夕',
+  '2028-01-05':'春節','2028-01-06':'春節','2028-01-07':'春節','2028-01-08':'春節',
+  '2028-02-28':'和平紀念日','2028-04-03':'兒童節','2028-04-04':'清明節',
+  '2028-04-05':'清明補假','2028-05-01':'勞動節','2028-06-25':'端午節',
+  '2028-09-03':'中秋節','2028-10-10':'國慶日',
+};
+function isHoliday(dk){ return !!TW_HOLIDAYS[dk]; }
+function holidayName(dk){ return TW_HOLIDAYS[dk]||''; }
+
+const today   = new Date();
+const todayDk = dkey(today.getFullYear(), today.getMonth()+1, today.getDate());
+
+/* ════════════════════════════
+   STATE
+════════════════════════════ */
+let curSY = 0, curMonthIdx = 0;
+function getMonths(){ return SY_DEF[curSY].months; }
+function resolveInitialIdx(){
+  const i = getMonths().findIndex(m=>m.year===today.getFullYear()&&m.month===today.getMonth()+1);
+  return i>=0?i:0;
+}
+
+/* ════════════════════════════
+   BUILD CALENDAR
+════════════════════════════ */
+function buildCalendar(){
+  const c = document.getElementById('calContainer');
+  c.innerHTML='';
+  getMonths().forEach(({year,month})=>c.appendChild(buildMonth(year,month)));
+  updateNavLbl();
+  scrollToIdx(curMonthIdx,false);
+  setTimeout(setupObserver,100);
+}
+
+function buildMonth(year,month){
+  const sec=document.createElement('div'); sec.className='month-section';
+
+  const mh=document.createElement('div'); mh.className='month-heading';
+  const mt=document.createElement('div'); mt.className='mh-title';
+  mt.innerHTML=`<span class="mh-yr">${year}</span><span class="mh-mon">${TW_MON[month-1]}月</span><span class="mh-sy">${syLabel(year,month)}</span>`;
+  mh.appendChild(mt); sec.appendChild(mh);
+
+  const wr=document.createElement('div'); wr.className='wday-row';
+  WDAYS.forEach((l,i)=>{
+    const w=document.createElement('div');
+    w.className='wday-cell'+(i===5?' sat':i===6?' sun':'');
+    w.textContent=l; wr.appendChild(w);
+  });
+  sec.appendChild(wr);
+
+  const grid=document.createElement('div'); grid.className='cal-grid';
+  const firstDow=(new Date(year,month-1,1).getDay()+6)%7;
+  for(let i=0;i<firstDow;i++){
+    const e=document.createElement('div'); e.className='day-cell empty'; grid.appendChild(e);
+  }
+  const total=new Date(year,month,0).getDate();
+  for(let d=1;d<=total;d++){
+    const dow=(firstDow+d-1)%7;
+    const dk=dkey(year,month,d);
+    const cell=document.createElement('div');
+    const hday=isHoliday(dk);
+    cell.className='day-cell'+(dow>=5?' weekend':'')+(hday?' holiday':'')+(dk===todayDk?' today':'');
+    cell.dataset.dk=dk; cell.dataset.label=`${year}年${month}月${d}日`; cell.dataset.dow=dow;
+
+    const badge=document.createElement('div'); badge.className='date-badge';
+    badge.innerHTML=(dk===todayDk)?`<span class="date-circle">${d}</span>`:`<span class="date-num">${d}</span>`;
+    cell.appendChild(badge);
+
+    if(hday){
+      const tag=document.createElement('div'); tag.className='holiday-tag';
+      tag.textContent=holidayName(dk); cell.appendChild(tag);
+    }
+
+    const chips=document.createElement('div'); chips.className='entry-chips'; chips.id='chips-'+dk;
+    cell.appendChild(chips);
+
+    const hint=document.createElement('div'); hint.className='edit-hint'; hint.textContent='點擊編輯';
+    cell.appendChild(hint);
+
+    cell.addEventListener('click',()=>openModal(dk,cell.dataset.label,parseInt(cell.dataset.dow)));
+    grid.appendChild(cell);
+  }
+  sec.appendChild(grid);
+  return sec;
+}
+
+/* ════════════════════════════
+   CHIPS
+════════════════════════════ */
+function renderChips(dk){
+  const cont=document.getElementById('chips-'+dk); if(!cont) return;
+  cont.innerHTML='';
+  const entry=getEntry(dk);
+  let total=0;
+  CATS.forEach(cat=>{
+    const v=(entry[cat.key]||'').trim(); if(!v) return;
+    total++;
+    const chip=document.createElement('div'); chip.className='chip';
+    chip.style.cssText=`background:${cat.bg};color:${cat.fg};border-left-color:${cat.bd}`;
+    // 標籤加粗，內容換行顯示
+    chip.innerHTML=`<span class="chip-label">${cat.label}：</span>${escHtml(v)}`;
+    cont.appendChild(chip);
+  });
+  const cell=cont.closest('.day-cell');
+  if(cell) cell.classList.toggle('has-data',total>0);
+}
+
+function escHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function refreshAllChips(){
+  document.querySelectorAll('[id^="chips-"]').forEach(el=>renderChips(el.id.slice(6)));
+}
+
+/* ════════════════════════════
+   MODAL
+════════════════════════════ */
+let currentDk='';
+
+function openModal(dk,label,dow){
+  currentDk=dk;
+  document.getElementById('modalDateLbl').textContent=label;
+  document.getElementById('modalSub').textContent='星期'+WDAYS[dow];
+  const entry=getEntry(dk);
+  const body=document.getElementById('modalBody'); body.innerHTML='';
+  CATS.forEach(cat=>{
+    const row=document.createElement('div'); row.className='cat-field';
+    const pill=document.createElement('div'); pill.className='cat-pill';
+    pill.style.cssText=`background:${cat.bg};color:${cat.fg}`;
+    pill.textContent=cat.label;
+    const ta=document.createElement('textarea'); ta.className='field-ta';
+    ta.id='mf-'+cat.key; ta.value=entry[cat.key]||''; ta.placeholder=cat.label+' 事項…'; ta.rows=2;
+    row.appendChild(pill); row.appendChild(ta); body.appendChild(row);
+  });
+  const st=document.getElementById('saveTxt'); st.textContent=''; st.className='save-txt';
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(()=>body.querySelector('textarea')?.focus(),60);
+}
+
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+
+document.getElementById('modalX').addEventListener('click',closeModal);
+document.getElementById('overlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('overlay')) closeModal();
+});
+
+document.getElementById('saveBtn').addEventListener('click',()=>{
+  const data={};
+  CATS.forEach(c=>{ data[c.key]=(document.getElementById('mf-'+c.key)?.value||''); });
+  const st=document.getElementById('saveTxt');
+  st.textContent='儲存中…'; st.className='save-txt saving';
+  setEntry(currentDk,data).then(()=>{
+    renderChips(currentDk);
+    st.textContent='✓ 已同步'; st.className='save-txt saved';
+    setTimeout(()=>{st.textContent='';st.className='save-txt';},2200);
+    showToast('已儲存並同步至所有裝置 ✓');
+  }).catch(()=>{
+    st.textContent='⚠ 失敗'; st.className='save-txt fail';
+    showToast('儲存失敗，請確認網路或 Firebase 規則');
+  });
+});
+
+document.getElementById('delBtn').addEventListener('click',()=>{
+  delEntry(currentDk)
+    .then(()=>{ renderChips(currentDk); closeModal(); showToast('已清除當日記事'); })
+    .catch(()=>showToast('清除失敗'));
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') closeModal();
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){
+    e.preventDefault();
+    if(document.getElementById('overlay').classList.contains('open'))
+      document.getElementById('saveBtn').click();
+  }
+});
+
+/* ════════════════════════════
+   NAVIGATION
+════════════════════════════ */
+function updateNavLbl(){
+  const {year,month}=getMonths()[curMonthIdx];
+  document.getElementById('curMonthLbl').textContent=`${year}/${String(month).padStart(2,'0')}`;
+}
+
+function scrollToIdx(idx,smooth=true){
+  const secs=document.querySelectorAll('.month-section');
+  if(!secs[idx]) return;
+  curMonthIdx=idx;
+  secs[idx].scrollIntoView({behavior:smooth?'smooth':'instant',block:'start'});
+  updateNavLbl();
+}
+
+document.getElementById('prevBtn').addEventListener('click',()=>{ if(curMonthIdx>0) scrollToIdx(curMonthIdx-1); });
+document.getElementById('nextBtn').addEventListener('click',()=>{ if(curMonthIdx<getMonths().length-1) scrollToIdx(curMonthIdx+1); });
+document.getElementById('todayBtn').addEventListener('click',()=>{
+  const ti=getMonths().findIndex(m=>m.year===today.getFullYear()&&m.month===today.getMonth()+1);
+  if(ti>=0) scrollToIdx(ti);
+});
+
+document.querySelectorAll('.sy-opt').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const sy=parseInt(btn.dataset.sy); if(sy===curSY) return;
+    curSY=sy; curMonthIdx=0;
+    document.querySelectorAll('.sy-opt').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.sy)===sy));
+    buildCalendar();
+  });
+});
+
+function initSY(){
+  const m=today.getMonth()+1,y=today.getFullYear();
+  if((y===2027&&m>=8)||(y===2028&&m<=7)){
+    curSY=1;
+    document.querySelectorAll('.sy-opt').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.sy)===1));
+  }
+}
+
+let observerInstance=null;
+function setupObserver(){
+  if(observerInstance) observerInstance.disconnect();
+  const secs=document.querySelectorAll('.month-section');
+  observerInstance=new IntersectionObserver(entries=>{
+    entries.forEach(en=>{
+      if(en.isIntersecting){
+        const idx=Array.from(secs).indexOf(en.target);
+        if(idx>=0){ curMonthIdx=idx; updateNavLbl(); }
+      }
+    });
+  },{threshold:0.1});
+  secs.forEach(s=>observerInstance.observe(s));
+}
+
+/* ════════════════════════════
+   ROOM DIALOG
+════════════════════════════ */
+function showRoomDialog(){
+  const r=prompt(`目前房間代碼：${roomKey}\n\n輸入新房間代碼（不同代碼彼此資料獨立）：\n留空則維持現狀。`,roomKey);
+  if(r===null||r.trim()===''||r.trim()===roomKey) return;
+  const newRoom=r.trim().replace(/[^a-zA-Z0-9_\-]/g,'');
+  if(!newRoom){ showToast('代碼只能包含英數字與 -_'); return; }
+  liveDb={};
+  refreshAllChips();
+  attachListener(newRoom);
+  showToast(`已切換至房間：${newRoom}`);
+}
+
+/* ════════════════════════════
+   TOAST
+════════════════════════════ */
+let toastTimer;
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400);
+}
+
+/* ════════════════════════════
+   LOADING
+════════════════════════════ */
+function hideLoading(){
+  const el=document.getElementById('loadingScreen'); if(!el) return;
+  el.style.opacity='0';
+  setTimeout(()=>el.remove(),380);
+}
+
+/* ════════════════════════════
+   BOOT
+════════════════════════════ */
+initSY();
+curMonthIdx=resolveInitialIdx();
+buildCalendar();
+attachListener(roomKey);
+</script>
+</body>
+</html>
